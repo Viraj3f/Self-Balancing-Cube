@@ -1,4 +1,4 @@
-% Model parameters
+pu% Model parameters
 l = 0.085;
 lb = 0.075;
 mb = 0.419;
