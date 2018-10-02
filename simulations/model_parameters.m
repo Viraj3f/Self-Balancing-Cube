@@ -1,4 +1,4 @@
-pu% Model parameters
+    % Model parameters
 l = 0.085;
 lb = 0.075;
 mb = 0.419;
@@ -24,3 +24,5 @@ b3 = -Cw * b1;
 % Control system parameters
 maxDCCurrent = 10;
 sampleTime = 0.01;
+
+sim('PID_simulation', 'TimeOut', 10)

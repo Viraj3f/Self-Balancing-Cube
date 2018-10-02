@@ -1,3 +1,7 @@
 *.swp
 .DS_Store
 .mypy_cache
+*.autosave
+*.m~
+__pycache__
+slprj/**
