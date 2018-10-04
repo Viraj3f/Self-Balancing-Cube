@@ -5,3 +5,4 @@
 *.m~
 __pycache__
 slprj/**
+.ipynb_checkpoints
