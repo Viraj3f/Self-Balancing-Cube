@@ -1,8 +1,10 @@
-from pid import PID
 import numpy as np
 
 
 def runge_kutta_iteration(f, y, h):
+    """
+    Simulates a step using fourth order runge_kutta approximations
+    """
     k1 = h * f(y)
     k2 = h * f(y + k1 / 2)
     k3 = h * f(y + k2 / 2)
@@ -19,7 +21,7 @@ class CubeSystem:
     phi_dot_b = a0 * phi_b + a1 * phi_w + a2 * sin(theta_b) + a3 * T
     phi_dot_w = b0 * phi_b + b1 * phi_w + b2 * sin(theta_b) + b3 * T
     """
-    def __init__(self, setpoint=0):
+    def __init__(self, terminating_angle=np.pi/2):
         # System parameters
         l = 0.085  # noqa: E741
         lb = 0.075
@@ -46,6 +48,9 @@ class CubeSystem:
         self.current_theta_w = 0
         self.current_phi_b = 0
         self.current_phi_w = 0
+        self.I_val = 0
+
+        self.terminating_angle = terminating_angle
 
     # System equations
     def f1(self, y):
@@ -81,11 +86,12 @@ class CubeSystem:
         Resets all the system states
         """
         self.current_theta_b = 0
-        self.current_theta_w = 0,
+        self.current_theta_w = 0
         self.current_phi_b = 0
         self.current_phi_w = 0
+        self.I_val = 0
 
-    def simulate(self, max_time, h, position_gains=(0, 0, 0)):
+    def simulate(self, max_time, h):
         # Simulation parameters
         N = int(max_time/h)
         phi_b = np.zeros(N)
@@ -100,31 +106,19 @@ class CubeSystem:
         phi_b[0] = self.current_phi_b
         phi_w[0] = self.current_phi_w
 
-        # set up PID controllers
-        PID_update_freq = 0.01
-        positionPID = PID(
-                position_gains[0],
-                position_gains[1],
-                position_gains[2],
-                setpoint=0,
-                sample_time=PID_update_freq)
-
-        I_val = 0
         I_values = []
-        last_update_time = 0
+
+        passed_terminating_angle = False
         for i in range(0, N - 1):
-            if last_update_time == 0 or time[i] - last_update_time >= PID_update_freq:
-                Km = 25.1e-3
-                I_val = np.clip(
-                        positionPID.compute(self.current_theta_b, time[i]),
-                        -10, 10)
-                T = Km * I_val
-                last_update_time = time[i]
+            if abs(theta_b[i]) > self.terminating_angle:
+                passed_terminating_angle = True
 
+            T = self.I_val
             self._update_system(i, h, theta_b, theta_w, phi_b, phi_w, time, T)
-            I_values.append(I_val)
+            I_values.append(self.I_val)
+            yield time[i], theta_b[i], phi_b[i], passed_terminating_angle
 
-        return time, theta_b, theta_w, phi_b, phi_w, I_values
+        return time[-1], theta_b[-1], phi_b[-1], True
 
     def _update_system(self, i, h, theta_b, theta_w, phi_b, phi_w, time, T):
         y = np.array([phi_b[i], phi_w[i], theta_b[i], T])
