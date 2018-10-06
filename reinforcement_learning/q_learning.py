@@ -1,3 +1,7 @@
+"""
+Tests to see the performance of Q learning
+"""
+
 import random
 import numpy as np
 from cube_system import CubeSystem
@@ -50,15 +54,7 @@ def get_state(observation):
 
 
 def get_reward(observation):
-    reward = 0
-    if abs(observation[0]) <= np.deg2rad(0.1):
-        reward += 20
-    elif abs(observation[0]) <= np.deg2rad(1):
-        reward += 10
-    else:
-        reward += 1
-
-    return reward
+    return 1
 
 
 def select_action(state, explore_rate):
@@ -84,7 +80,6 @@ def simulate():
     explore_rate = get_explore_rate(0)
     discount_factor = 0.3  # since the world is unchanging
 
-    num_timesteps = 2000
     cs = CubeSystem(terminating_angle=np.deg2rad(10))
 
     episodes = []
@@ -92,14 +87,15 @@ def simulate():
     for episode in range(num_episodes):
         # Reset the environment
         cs.reset()
-        cs.current_theta_b = np.deg2rad(1)
+        cs.current_theta_b = np.deg2rad(np.random.uniform(-1, 1))
 
         # Generator that will yield the next value in the system
         # every time next() is called.
-        cs_generator = cs.simulate(max_time=5, h=0.001)
+        cs_generator = cs.simulate(max_time=10, h=0.001, sample_time=0.01)
 
         # The initial state
-        state_0 = get_state((cs.current_theta_b, cs.current_phi_b))
+        time, theta_b, phi_b, _ = next(cs_generator)
+        state_0 = get_state((theta_b, phi_b))
         total_reward = 0
 
         timestep = 0
@@ -108,29 +104,26 @@ def simulate():
         times = []
         currents = []
         velocties = []
-        while timestep < num_timesteps and not should_terminate:
-            if timestep % 10:
-                # Select an action
-                action = select_action(state_0, explore_rate)
+        while not should_terminate:
+            # Select an action
+            action = select_action(state_0, explore_rate)
 
-                # Execute the action
-                cs.I_val = I_vals[action]
-                time, theta_b, phi_b, should_terminate = next(cs_generator)
-                obv = (theta_b, phi_b)
-                reward = get_reward(obv)
-                total_reward += reward
+            # Execute the action
+            cs.I_val = I_vals[action]
+            time, theta_b, phi_b, should_terminate = next(cs_generator)
+            obv = (theta_b, phi_b)
+            reward = get_reward(obv)
+            total_reward += reward
 
-                # Observe the result
-                state = get_state(obv)
+            # Observe the result
+            state = get_state(obv)
 
-                # Update the Q based on the result
-                best_q = np.amax(Q[state])
-                Q[state_0 + (action,)] += learning_rate * (reward + discount_factor*(best_q) - Q[state_0 + (action,)])
+            # Update the Q based on the result
+            best_q = np.amax(Q[state])
+            Q[state_0 + (action,)] += learning_rate * (reward + discount_factor*(best_q) - Q[state_0 + (action,)])
 
-                # Setting up for the next iteration
-                state_0 = state
-            else:
-                time, theta_b, phi_b, should_terminate = next(cs_generator)
+            # Setting up for the next iteration
+            state_0 = state
 
             timestep += 1
             currents.append(cs.I_val)
@@ -140,8 +133,8 @@ def simulate():
 
         episodes.append(episode)
         timesteps.append(timestep)
-        print(timestep)
-        if timestep >= num_timesteps:
+        print("Episode: {}, timestep {}".format(episode, timestep))
+        if timestep >= 955:
             plt.subplot(2, 2, 1)
             plt.plot(times, thetas)
             plt.subplot(2, 2, 2)

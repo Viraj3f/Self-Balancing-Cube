@@ -3,7 +3,7 @@ import numpy as np
 
 def runge_kutta_iteration(f, y, h):
     """
-    Simulates a step using fourth order runge_kutta approximations
+    Simulates a step using fourth order runge-kutta approximation
     """
     k1 = h * f(y)
     k2 = h * f(y + k1 / 2)
@@ -32,16 +32,17 @@ class CubeSystem:
         Cb = 1.02e-3
         Cw = 0.05e-3
         g = 9.81
+        Km = 25.1e-3
 
         self.a0 = -Cb / (Ib + mw * l**2)
         self.a1 = Cw / (Ib + mw * l**2)
         self.a2 = (mb * lb + mw * l) * g / (Ib + mw * l**2)
-        self.a3 = -1 / (Ib + mw * l**2)
+        self.a3 = -Km / (Ib + mw * l**2)
 
         self.b0 = -self.a0
         self.b1 = (Ib + Iw + mw * l**2) / (Iw * (Ib + mw * l**2)) * -Cw
         self.b2 = self.a2
-        self.b3 = (Ib + Iw + mw * l**2) / (Iw * (Ib + mw * l**2))
+        self.b3 = Km * (Ib + Iw + mw * l**2) / (Iw * (Ib + mw * l**2))
 
         # Initial values
         self.current_theta_b = 0
@@ -91,7 +92,17 @@ class CubeSystem:
         self.current_phi_w = 0
         self.I_val = 0
 
-    def simulate(self, max_time, h):
+    def update_BLDC_current(self, I_val):
+        """
+        Updates the current being sent into the DC motor.
+        """
+        self.I_val = I_val
+
+    def simulate(self, max_time, h, sample_time=0):
+        """
+        Generator returns the next step in the simulation each time it
+        is called.
+        """
         # Simulation parameters
         N = int(max_time/h)
         phi_b = np.zeros(N)
@@ -106,19 +117,22 @@ class CubeSystem:
         phi_b[0] = self.current_phi_b
         phi_w[0] = self.current_phi_w
 
-        I_values = []
+        last_time = 0
+        done = False
+        yield time[0], theta_b[0], phi_b[0], self.I_val, done
 
-        passed_terminating_angle = False
         for i in range(0, N - 1):
-            if abs(theta_b[i]) > self.terminating_angle:
-                passed_terminating_angle = True
+            self._update_system(
+                    i, h, theta_b, theta_w,
+                    phi_b, phi_w, time, self.I_val)
 
-            T = self.I_val
-            self._update_system(i, h, theta_b, theta_w, phi_b, phi_w, time, T)
-            I_values.append(self.I_val)
-            yield time[i], theta_b[i], phi_b[i], passed_terminating_angle
+            # True if the anlge is greater than the terminating angle
+            done = abs(theta_b[i]) > self.terminating_angle
 
-        return time[-1], theta_b[-1], phi_b[-1], True
+            if time[i] - last_time > sample_time:
+                last_time = time[i]
+                yield time[i + 1], theta_b[i + 1], \
+                    phi_b[i + 1], self.I_val, done
 
     def _update_system(self, i, h, theta_b, theta_w, phi_b, phi_w, time, T):
         y = np.array([phi_b[i], phi_w[i], theta_b[i], T])
