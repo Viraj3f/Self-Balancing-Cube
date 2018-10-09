@@ -1,13 +1,9 @@
-[//]: # (Image References)
+# DDPG Model
 
-[image1]: https://user-images.githubusercontent.com/10624937/42135610-c37e0292-7d12-11e8-8228-4d3585f8c026.gif "Trained Agent"
+The DDPG model uses the implementation found here:
+https://github.com/udacity/deep-reinforcement-learning/blob/master/ddpg-pendulum/ddpg_agent.py
 
-# Actor-Critic Methods
-
-### Instructions
-
-Open `DDPG.ipynb` to see an implementation of DDPG with OpenAI Gym's Pendulum environment.
-
-### Results
-
-![Trained Agent][image1]
+## How to train
+```
+python train.py
+```
