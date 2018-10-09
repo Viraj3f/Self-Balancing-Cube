@@ -5,22 +5,6 @@ from gym import spaces
 from simulator import CubeSystem
 
 
-class CurrentActionSpace:
-    def __init__(self):
-        self.min_current = -10
-        self.max_current = 10
-        self.shape = (1, )
-
-    def sample(self):
-        current = np.random.uniform(self.min_current, self.max_current)
-        return np.array([current])
-
-
-class CubeObservationSpace:
-    def __init__(self):
-        self.shape = (3, )
-
-
 class CubeEnv(gym.Env):
     def __init__(self):
         self.max_speed = np.deg2rad(500)  # max angular velocity is 500 deg/s
