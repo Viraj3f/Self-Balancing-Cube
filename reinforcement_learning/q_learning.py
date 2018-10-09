@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 
 # Number of possible current values
-num_actions = 2000
+num_actions = 100
 I_vals = np.linspace(-10, 10, num_actions)
 
 # theta_b, thetab'
@@ -19,8 +19,8 @@ num_buckets = (30, 10)
 state_bounds = np.zeros((len(num_buckets), 2))
 
 # theta_b is bounded between -45 and 45 degrees
-state_bounds[0][0] = np.deg2rad(-45)
-state_bounds[0][1] = np.deg2rad(+45)
+state_bounds[0][0] = np.deg2rad(-10)
+state_bounds[0][1] = np.deg2rad(+10)
 
 # theta_b' is bounded between -50 and 50 deg/second
 state_bounds[1][0] = np.deg2rad(-500)
@@ -53,8 +53,8 @@ def get_state(observation):
     return tuple(state)
 
 
-def get_reward(observation):
-    return 1
+def get_reward(observation, I_val):
+    return -(observation[0]**2 + 0.1 * observation[1] + 0.001 * I_val**2)
 
 
 def select_action(state, explore_rate):
@@ -75,7 +75,7 @@ def get_learning_rate(t):
 
 
 def simulate():
-    num_episodes = 10000
+    num_episodes = 1000
     learning_rate = get_learning_rate(0)
     explore_rate = get_explore_rate(0)
     discount_factor = 0.3  # since the world is unchanging
@@ -87,14 +87,14 @@ def simulate():
     for episode in range(num_episodes):
         # Reset the environment
         cs.reset()
-        cs.current_theta_b = np.deg2rad(np.random.uniform(-1, 1))
+        cs.current_theta_b = np.deg2rad(-1)
 
         # Generator that will yield the next value in the system
         # every time next() is called.
         cs_generator = cs.simulate(max_time=10, h=0.001, sample_time=0.01)
 
         # The initial state
-        time, theta_b, phi_b, _ = next(cs_generator)
+        time, theta_b, phi_b, _, _ = next(cs_generator)
         state_0 = get_state((theta_b, phi_b))
         total_reward = 0
 
@@ -110,9 +110,9 @@ def simulate():
 
             # Execute the action
             cs.I_val = I_vals[action]
-            time, theta_b, phi_b, should_terminate = next(cs_generator)
+            time, theta_b, phi_b, _, should_terminate = next(cs_generator)
             obv = (theta_b, phi_b)
-            reward = get_reward(obv)
+            reward = get_reward(obv, I_vals[action])
             total_reward += reward
 
             # Observe the result
@@ -125,7 +125,6 @@ def simulate():
             # Setting up for the next iteration
             state_0 = state
 
-            timestep += 1
             currents.append(cs.I_val)
             thetas.append(np.rad2deg(theta_b))
             times.append(time)
@@ -133,8 +132,8 @@ def simulate():
 
         episodes.append(episode)
         timesteps.append(timestep)
-        print("Episode: {}, timestep {}".format(episode, timestep))
-        if timestep >= 955:
+        print("Episode: {}, timestep {}".format(episode, reward))
+        if episode % 10 == 0:
             plt.subplot(2, 2, 1)
             plt.plot(times, thetas)
             plt.subplot(2, 2, 2)
