@@ -38,7 +38,7 @@ class CubeEnv(gym.Env):
 
         state = self._get_state(theta_b, phi_b)
         reward = self._get_reward(theta_b, phi_b, action)
-        
+
         return state, reward, done, {}
 
     def reset(self):

@@ -134,6 +134,8 @@ class CubeSystem:
                 yield time[i + 1], theta_b[i + 1], \
                     phi_b[i + 1], self.I_val, done
 
+        yield time[-1], theta_b[-1], phi_b[-1], self.I_val, True
+
     def _update_system(self, i, h, theta_b, theta_w, phi_b, phi_w, time, T):
         y = np.array([phi_b[i], phi_w[i], theta_b[i], T])
 
