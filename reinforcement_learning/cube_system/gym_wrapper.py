@@ -6,7 +6,7 @@ from cube_system.simulator import CubeSystem
 
 
 class CubeEnv(gym.Env):
-    def __init__(self):
+    def __init__(self, terminating_angle=np.deg2rad(15)):
         self.max_speed = np.deg2rad(500)  # max angular velocity is 500 deg/s
 
         self.max_current = 10  # amps
@@ -23,7 +23,7 @@ class CubeEnv(gym.Env):
                 high=high,
                 dtype=np.float32)
 
-        self.cs = CubeSystem(terminating_angle=np.deg2rad(15))
+        self.cs = CubeSystem(terminating_angle=terminating_angle)
         self.cs_generator = None
 
     def render(self):
@@ -43,7 +43,10 @@ class CubeEnv(gym.Env):
 
     def reset(self):
         self.cs.reset()
-        self.cs.current_theta_b = np.deg2rad(2)
+        self.cs.current_theta_b = np.random.uniform(
+                low=-np.deg2rad(2),
+                high=+np.deg2rad(2))
+
         self.cs_generator = self.cs.simulate(
             max_time=5,
             h=0.001,
