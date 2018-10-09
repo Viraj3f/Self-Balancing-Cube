@@ -2,7 +2,7 @@ import numpy as np
 import gym
 from gym import spaces
 
-from simulator import CubeSystem
+from cube_system.simulator import CubeSystem
 
 
 class CubeEnv(gym.Env):
@@ -38,8 +38,8 @@ class CubeEnv(gym.Env):
 
         state = self._get_state(theta_b, phi_b)
         reward = self._get_reward(theta_b, phi_b, action)
-
-        return state, reward, done
+        
+        return state, reward, done, {}
 
     def reset(self):
         self.cs.reset()
