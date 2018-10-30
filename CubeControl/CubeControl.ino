@@ -11,46 +11,45 @@
 */
 
 #include <Adafruit_BNO055.h>
-#include <Servo.h> //Using servo library to control ESC
+#include <Servo.h>
 
+// The IMU object.
 Adafruit_BNO055 bno = Adafruit_BNO055();
+
+// The ESC object with common signals.
+const int escBreakSignal = 1500;
+const int minEscSignal = 1400;
+const int maxEscSignal = 1600;
 Servo esc;
+
+// The maximum angle magnitude the cube should ever reach.
 const int angleBound = 50;
-double angleOffset = 0;
 
 void setup() {
     Serial.begin(9600);
     
     // Esc setup
     esc.attach(9);
-    esc.writeMicroseconds(1500);
+    esc.writeMicroseconds(escBreakSignal);
     delay(2000);
-    Serial.println("Esc is setup");
+    Serial.println("Esc is setup.");
     
     // BNO setup
     if(!bno.begin()) {
         printErrorAndExit("Could not connect to BNO.");
     }
-    delay(1000);
-    Serial.println("BNO is attached");
+    Serial.println("BNO is attached.");
     bno.setExtCrystalUse(true);
-    
-    delay(2000);
+    delay(1000);
     double initialAngle = getAngleFromIMU(bno);
-    if (initialAngle <= 45){
-        angleOffset = 45.0 + initialAngle;
-    }
-    else {
-        angleOffset = initialAngle - 45.0;
-    }
-    Serial.println("BNO is calibrated with offset: " + String(angleOffset));
+    Serial.println("BNO has intial angle: " + String(initialAngle));
 }
 
 
 void loop() {
     double angle = getAngleFromIMU(bno);
     if (fabs(angle) > angleBound) {
-      printErrorAndExit("Angle is past max angle. Current angle: " + String(angle) + " Angle bound: " + String(angleBound));
+         printErrorAndExit("Angle is past max angle. Current angle: " + String(angle) + " Angle bound: " + String(angleBound));
     }
 
     int escValue = getEscValFromAngle(angle); 
@@ -59,23 +58,22 @@ void loop() {
     //esc.writeMicroseconds(escValue);
 }
 
-double getAngleFromIMU(Adafruit_BNO055 &bno){
-  imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
-  sensors_event_t event; 
-  double angle = euler.y();
-  return euler.y() - angleOffset;
+double getAngleFromIMU(Adafruit_BNO055& bno){
+   const double angleOffset = 45.0
+   imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
+   return euler.y() - angleOffset;
 }
 
 int getEscValFromAngle(double angle) {
     const int scalingValue = 1000;
-    const int minESC = 1400;
-    const int maxESC = 1600;
     int scaledAngle = (int)(angle * scalingValue);
-    int escValue = map(scaledAngle, -angleBound * scalingValue, angleBound * scalingValue, minESC, maxESC);
+    int escValue = map(scaledAngle, -angleBound * scalingValue, angleBound * scalingValue, minEscSignal, maxEscSignal);
+    escValue = constrain(escValue, minEscSignal, maxEscSignal)
     return escValue;
 }
 
 void printErrorAndExit(String message) {
+    esc.writeMicroseconds(escBreakSignal);
     Serial.println(message);
     while(true);
 }
