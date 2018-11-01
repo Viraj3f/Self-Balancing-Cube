@@ -14,7 +14,7 @@
 #include <Servo.h>
 
 // The IMU object.
-Adafruit_BNO055 bno = Adafruit_BNO055();
+Adafruit_BNO055 bno;
 
 // The ESC object with common signals.
 const int escBreakSignal = 1500;
@@ -25,7 +25,8 @@ Servo esc;
 // The maximum angle magnitude the cube should ever reach.
 const int angleBound = 50;
 
-void setup() {
+void setup()
+{
     Serial.begin(9600);
     
     // Esc setup
@@ -46,33 +47,38 @@ void setup() {
 }
 
 
-void loop() {
+void loop()
+{
     double angle = getAngleFromIMU(bno);
-    if (fabs(angle) > angleBound) {
+    if (fabs(angle) > angleBound)
+    {
          printErrorAndExit("Angle is past max angle. Current angle: " + String(angle) + " Angle bound: " + String(angleBound));
     }
 
     int escValue = getEscValFromAngle(angle); 
-    Serial.println(angle);
+    Serial.println("Angle:" + String(angle) + " Esc value: " + String(escValue));
     
     //esc.writeMicroseconds(escValue);
 }
 
-double getAngleFromIMU(Adafruit_BNO055& bno){
-   const double angleOffset = 45.0
+double getAngleFromIMU(Adafruit_BNO055& bno)
+{
+   const double angleOffset = 45.0;
    imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
    return euler.y() - angleOffset;
 }
 
-int getEscValFromAngle(double angle) {
+int getEscValFromAngle(double angle)
+{
     const int scalingValue = 1000;
     int scaledAngle = (int)(angle * scalingValue);
     int escValue = map(scaledAngle, -angleBound * scalingValue, angleBound * scalingValue, minEscSignal, maxEscSignal);
-    escValue = constrain(escValue, minEscSignal, maxEscSignal)
+    escValue = constrain(escValue, minEscSignal, maxEscSignal);
     return escValue;
 }
 
-void printErrorAndExit(String message) {
+void printErrorAndExit(String message)
+{
     esc.writeMicroseconds(escBreakSignal);
     Serial.println(message);
     while(true);
