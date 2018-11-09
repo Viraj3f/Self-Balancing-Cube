@@ -12,53 +12,127 @@
 
 #include <Adafruit_BNO055.h>
 #include <Servo.h>
+#include <PID_v1.h>
+
+/*
+ * Constant settings for the system.
+ */
+namespace Settings
+{
+    // The break signal to the ESC.
+    const int escBreakSignal = 1500;
+
+    // The maximimum signal to add or subtract relative to
+    // the break signal.
+    const int escUpperBound = 150;
+
+    // The minimum signal to add  or subtract relative to 
+    // the break signal, since BLDCs are unstable at low speeds.
+    const int escLowerBound = 30;
+
+    // The angle at which the cube system should just quit.
+    const int unsafeAngle = 60;
+
+    // The angle at which the cube should begin balancing at.
+    const int breakAngle = 10;
+
+    // The sampling time of the PID controller in ms.
+    const int PIDSampleTime = 10;
+};
+
+/*
+ * Defining the state of the system.
+ */
+ struct State
+ {
+    // The current angle of the cube.
+    double currentAngle;
+
+    // The reference angle for the state.
+    const double referenceAngle = 0;
+
+    // The value that the PID controller will update.
+    double pidValue;
+
+    State() : currentAngle(0), pidValue (0) {};
+ };
+
+// The state of the system.
+State state;
+
+// The PID controller.
+PID controller(&state.currentAngle,
+               &state.pidValue,
+               &state.referenceAngle,
+               1, 0, 0, DIRECT);
 
 // The IMU object.
 Adafruit_BNO055 bno;
 
-// The ESC object with common signals.
-const int escBreakSignal = 1500;
-const int minEscSignal = 1400;
-const int maxEscSignal = 1600;
+// The esc object
 Servo esc;
-
-// The maximum angle magnitude the cube should ever reach.
-const int angleBound = 50;
 
 void setup()
 {
     Serial.begin(9600);
+
+    // Set PID settings.
+    controller.SetSampleTime(Settings::PIDSampleTime);
+    controller.SetOutputLimits(-Settings::escUpperBound, Settings::escUpperBound);
     
-    // Esc setup
+    // Setup ESC.
     esc.attach(9);
-    esc.writeMicroseconds(escBreakSignal);
+    esc.writeMicroseconds(Settings::escBreakSignal);
     delay(2000);
     Serial.println("Esc is setup.");
     
-    // BNO setup
-    if(!bno.begin()) {
+    // Setup BNO.
+    if(!bno.begin())
+    {
         printErrorAndExit("Could not connect to BNO.");
     }
     Serial.println("BNO is attached.");
     bno.setExtCrystalUse(true);
     delay(1000);
-    double initialAngle = getAngleFromIMU(bno);
-    Serial.println("BNO has intial angle: " + String(initialAngle));
+    
+    state.currentAngle = getAngleFromIMU(bno);
+    Serial.println("BNO has intial angle: " + String(state.currentAngle));
 }
 
 
 void loop()
 {
-    double angle = getAngleFromIMU(bno);
-    if (fabs(angle) > angleBound)
+    state.currentAngle = getAngleFromIMU(bno);
+    Serial.println("Theta: " + String(state.currentAngle));
+    if (fabs(state.currentAngle) >= Settings::unsafeAngle)
     {
-         printErrorAndExit("Angle is past max angle. Current angle: " + String(angle) + " Angle bound: " + String(angleBound));
+        // Some invalid reading was found, just exit.
+        controller.SetMode(MANUAL);
+        printErrorAndExit("Angle is past " + String(Settings::unsafeAngle) + 
+                          " degrees. Current angle: "+ String(state.currentAngle));
     }
+    else if (fabs(state.currentAngle) >= Settings::breakAngle)
+    {
+        // Send the break signal and do nothing.
+        esc.writeMicroseconds(Settings::escBreakSignal);
+        controller.SetMode(MANUAL);
+        Serial.println("Esc signal: " + String(Settings::escBreakSignal));
+    }
+    else
+    {
+        controller.SetMode(AUTOMATIC);
+        controller.Compute();
+        int escDiff = state.pidValue;
 
-    int escValue = getEscValFromAngle(angle); 
-    Serial.println("Angle:" + String(angle) + " Esc value: " + String(escValue));
-    
-    //esc.writeMicroseconds(escValue);
+        if (abs(escDiff) < Settings::escLowerBound)
+        {
+            escDiff = escDiff > 0 ? Settings::escLowerBound : -Settings::escLowerBound;
+        }
+
+        int escValue = Settings::escBreakSignal + escDiff;
+        esc.writeMicroseconds(escValue);
+        Serial.println("Esc signal: " + String(escValue));
+    }
 }
 
 double getAngleFromIMU(Adafruit_BNO055& bno)
@@ -68,18 +142,9 @@ double getAngleFromIMU(Adafruit_BNO055& bno)
    return euler.y() - angleOffset;
 }
 
-int getEscValFromAngle(double angle)
+void printErrorAndExit(const String& message)
 {
-    const int scalingValue = 1000;
-    int scaledAngle = (int)(angle * scalingValue);
-    int escValue = map(scaledAngle, -angleBound * scalingValue, angleBound * scalingValue, minEscSignal, maxEscSignal);
-    escValue = constrain(escValue, minEscSignal, maxEscSignal);
-    return escValue;
-}
-
-void printErrorAndExit(String message)
-{
-    esc.writeMicroseconds(escBreakSignal);
+    esc.writeMicroseconds(Settings::escBreakSignal);
     Serial.println(message);
     while(true);
 }
