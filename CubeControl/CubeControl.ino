@@ -30,10 +30,10 @@ namespace Settings
     const int escLowerBound = 30;
 
     // The angle at which the cube system should just quit.
-    const int unsafeAngle = 360;
+    const double unsafeAngle = 360;
 
     // The angle at which the cube should begin balancing at.
-    const int breakAngle = 30;
+    const double breakAngle = 30;
 
     // The sampling time of the PID controller in ms.
     const int PIDSampleTime = 10;
@@ -73,42 +73,44 @@ class PID
         this->kp = _kp;
         this->ki = _ki * sampleTimeInSec;
         this->kd = _kd / sampleTimeInSec;
+
+        this->reset();
     }
 
     void reset()
     {
-      lastTime = 0;
-      output = 0;
-      errSum = 0;
-      lastInput = 0;
+        lastTime = 0;
+        output = 0;
+        errSum = 0;
+        lastInput = 0;
     }
-
 
     double compute(double Input, double Setpoint)
     {
-       unsigned long now = millis();
-       unsigned long timeChange = (now - lastTime);
-       if (timeChange >= sampleTime)
-       {
-          /*Compute all the working error variables*/
-          double error = Setpoint - Input;
-          errSum += error;
-          double dInput = (Input - lastInput);
+        unsigned long now = millis();
+        unsigned long timeChange = (now - lastTime);
+        if (timeChange >= sampleTime)
+        {
+            /*Compute all the working error variables*/
+            double error = Setpoint - Input;
+            errSum += error;
+            double dInput = (Input - lastInput);
 
-          if (Input * lastInput < 0){
-            //zero crossing
-            errSum = 0;
-          }
-      
-          /*Compute PID Output*/
-          output = kp * error + ki * errSum - kd * dInput;
-      
-          /*Remember some variables for next time*/
-          lastInput = Input;
-          lastTime = now;
-       }
+            if (Input * lastInput < 0)
+            {
+                // zero crossing
+                errSum = 0;
+            }
 
-       return output;
+            /*Compute PID Output*/
+            output = kp * error + ki * errSum - kd * dInput;
+
+            /*Remember some variables for next time*/
+            lastInput = Input;
+            lastTime = now;
+        }
+
+        return output;
     }
 };
 
@@ -205,5 +207,3 @@ void printErrorAndExit(const String& message)
     Serial.println(message);
     while(true);
 }
-  
-
