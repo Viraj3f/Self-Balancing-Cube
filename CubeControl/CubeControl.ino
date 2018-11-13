@@ -12,7 +12,6 @@
 
 #include <Adafruit_BNO055.h>
 #include <Servo.h>
-#include <PID_v1.h>
 
 /*
  * Constant settings for the system.
@@ -20,21 +19,21 @@
 namespace Settings
 {
     // The break signal to the ESC.
-    const int escBreakSignal = 1500;
+    const int escBreakSignal = 1480;
 
     // The maximimum signal to add or subtract relative to
     // the break signal.
-    const int escUpperBound = 150;
+    const int escUpperBound = 500;
 
     // The minimum signal to add  or subtract relative to 
     // the break signal, since BLDCs are unstable at low speeds.
     const int escLowerBound = 30;
 
     // The angle at which the cube system should just quit.
-    const int unsafeAngle = 60;
+    const int unsafeAngle = 360;
 
     // The angle at which the cube should begin balancing at.
-    const int breakAngle = 10;
+    const int breakAngle = 30;
 
     // The sampling time of the PID controller in ms.
     const int PIDSampleTime = 10;
@@ -49,22 +48,75 @@ namespace Settings
     double currentAngle;
 
     // The reference angle for the state.
-    const double referenceAngle = 0;
+    double referenceAngle;
 
-    // The value that the PID controller will update.
-    double pidValue;
-
-    State() : currentAngle(0), pidValue (0) {};
+    State() : currentAngle(0), referenceAngle(0) {};
  };
+
+ /*
+  * 
+  */
+
+class PID
+{
+  public:
+    unsigned long lastTime;
+    double output;
+    double errSum, lastInput;
+    double kp, ki, kd;
+    unsigned long sampleTime;
+
+    PID(double _kp, double _ki, double _kd, unsigned long _sampleTime)
+    {
+        this->sampleTime = _sampleTime;
+        double sampleTimeInSec = ((double)sampleTime)/1000;
+        this->kp = _kp;
+        this->ki = _ki * sampleTimeInSec;
+        this->kd = _kd / sampleTimeInSec;
+    }
+
+    void reset()
+    {
+      lastTime = 0;
+      output = 0;
+      errSum = 0;
+      lastInput = 0;
+    }
+
+
+    double compute(double Input, double Setpoint)
+    {
+       unsigned long now = millis();
+       unsigned long timeChange = (now - lastTime);
+       if (timeChange >= sampleTime)
+       {
+          /*Compute all the working error variables*/
+          double error = Setpoint - Input;
+          errSum += error;
+          double dInput = (Input - lastInput);
+
+          if (Input * lastInput < 0){
+            //zero crossing
+            errSum = 0;
+          }
+      
+          /*Compute PID Output*/
+          output = kp * error + ki * errSum - kd * dInput;
+      
+          /*Remember some variables for next time*/
+          lastInput = Input;
+          lastTime = now;
+       }
+
+       return output;
+    }
+};
+
+// Controller
+PID controller(-30, -6, 0, Settings::PIDSampleTime);
 
 // The state of the system.
 State state;
-
-// The PID controller.
-PID controller(&state.currentAngle,
-               &state.pidValue,
-               &state.referenceAngle,
-               1, 0, 0, DIRECT);
 
 // The IMU object.
 Adafruit_BNO055 bno;
@@ -75,15 +127,12 @@ Servo esc;
 void setup()
 {
     Serial.begin(9600);
-
-    // Set PID settings.
-    controller.SetSampleTime(Settings::PIDSampleTime);
-    controller.SetOutputLimits(-Settings::escUpperBound, Settings::escUpperBound);
     
     // Setup ESC.
-    esc.attach(9);
-    esc.writeMicroseconds(Settings::escBreakSignal);
-    delay(2000);
+    esc.attach(11);
+    delay(1000);
+    esc.writeMicroseconds(1500);
+    delay(5000);
     Serial.println("Esc is setup.");
     
     // Setup BNO.
@@ -103,11 +152,11 @@ void setup()
 void loop()
 {
     state.currentAngle = getAngleFromIMU(bno);
-    Serial.println("Theta: " + String(state.currentAngle));
+    Serial.print("Theta: " + String(state.currentAngle) + " ");
     if (fabs(state.currentAngle) >= Settings::unsafeAngle)
     {
         // Some invalid reading was found, just exit.
-        controller.SetMode(MANUAL);
+        controller.reset();
         printErrorAndExit("Angle is past " + String(Settings::unsafeAngle) + 
                           " degrees. Current angle: "+ String(state.currentAngle));
     }
@@ -115,29 +164,37 @@ void loop()
     {
         // Send the break signal and do nothing.
         esc.writeMicroseconds(Settings::escBreakSignal);
-        controller.SetMode(MANUAL);
+        controller.reset();
         Serial.println("Esc signal: " + String(Settings::escBreakSignal));
+        delay(1000);
     }
     else
     {
-        controller.SetMode(AUTOMATIC);
-        controller.Compute();
-        int escDiff = state.pidValue;
+        double escDiff = controller.compute(state.currentAngle, state.referenceAngle);
 
-        if (abs(escDiff) < Settings::escLowerBound)
+        if (abs(escDiff) > Settings::escUpperBound)
+        {
+            escDiff = escDiff > 0 ? Settings::escUpperBound : -Settings::escUpperBound;
+        }
+        else if (abs(escDiff) < Settings::escLowerBound)
         {
             escDiff = escDiff > 0 ? Settings::escLowerBound : -Settings::escLowerBound;
         }
 
-        int escValue = Settings::escBreakSignal + escDiff;
+        long escValue = Settings::escBreakSignal + escDiff;
         esc.writeMicroseconds(escValue);
-        Serial.println("Esc signal: " + String(escValue));
+        Serial.println("Relative esc signal: " + String(escDiff));
     }
+
+    Serial.print('\n');
+    delay(Settings::PIDSampleTime);
 }
+
+
 
 double getAngleFromIMU(Adafruit_BNO055& bno)
 {
-   const double angleOffset = 45.0;
+   const double angleOffset = 44.0;
    imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
    return euler.y() - angleOffset;
 }
@@ -149,3 +206,4 @@ void printErrorAndExit(const String& message)
     while(true);
 }
   
+
