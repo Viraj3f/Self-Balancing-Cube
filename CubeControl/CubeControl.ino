@@ -54,9 +54,8 @@ namespace Settings
  };
 
  /*
-  * 
+  * PID implementation class.
   */
-
 class PID
 {
   public:
@@ -106,7 +105,7 @@ class PID
             errSum += error;
             double dInput = (input - lastInput);
 
-            if (Input * lastInput < 0)
+            if (input * lastInput < 0)
             {
                 // zero crossing
                 errSum = 0;
@@ -165,6 +164,7 @@ void loop()
 {
     state.currentAngle = getAngleFromIMU(bno);
     Serial.print("Theta: " + String(state.currentAngle) + " ");
+    
     if (fabs(state.currentAngle) >= Settings::unsafeAngle)
     {
         // Some invalid reading was found, just exit.
@@ -201,8 +201,6 @@ void loop()
     Serial.print('\n');
     delay(Settings::PIDSampleTime);
 }
-
-
 
 double getAngleFromIMU(Adafruit_BNO055& bno)
 {
