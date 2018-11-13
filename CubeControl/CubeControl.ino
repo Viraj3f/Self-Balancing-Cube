@@ -65,6 +65,7 @@ class PID
     double errSum, lastInput;
     double kp, ki, kd;
     unsigned long sampleTime;
+    bool wasReset;
 
     PID(double _kp, double _ki, double _kd, unsigned long _sampleTime)
     {
@@ -73,28 +74,37 @@ class PID
         this->kp = _kp;
         this->ki = _ki * sampleTimeInSec;
         this->kd = _kd / sampleTimeInSec;
-
         this->reset();
     }
 
     void reset()
     {
+        wasReset = true;
         lastTime = 0;
         output = 0;
         errSum = 0;
         lastInput = 0;
     }
 
-    double compute(double Input, double Setpoint)
+    double compute(double input, double setpoint)
     {
+        if (wasReset)
+        {
+            // If the reset method was called,
+            // set lastInput to input to prevent a
+            // potentially large derivative term.
+            lastInput = input;
+            wasReset = false;
+        }
+
         unsigned long now = millis();
         unsigned long timeChange = (now - lastTime);
         if (timeChange >= sampleTime)
         {
             /*Compute all the working error variables*/
-            double error = Setpoint - Input;
+            double error = setpoint - input;
             errSum += error;
-            double dInput = (Input - lastInput);
+            double dInput = (input - lastInput);
 
             if (Input * lastInput < 0)
             {
@@ -106,7 +116,7 @@ class PID
             output = kp * error + ki * errSum - kd * dInput;
 
             /*Remember some variables for next time*/
-            lastInput = Input;
+            lastInput = input;
             lastTime = now;
         }
 
