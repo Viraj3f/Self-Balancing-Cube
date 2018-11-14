@@ -204,8 +204,9 @@ void loop()
 
 double getAngleFromIMU(Adafruit_BNO055& bno)
 {
-   const double angleOffset = 44.0;
-   imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
+   const double angleOffset = 47.0;
+   imu::Quaternion q = bno.getQuat();
+   imu::Vector<3> euler = q.toEuler();
    return euler.y() - angleOffset;
 }
 
