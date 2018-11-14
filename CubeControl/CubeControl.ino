@@ -23,7 +23,7 @@ namespace Settings
 
     // The maximimum signal to add or subtract relative to
     // the break signal.
-    const int escUpperBound = 500;
+    const int escUpperBound = 80;
 
     // The minimum signal to add  or subtract relative to 
     // the break signal, since BLDCs are unstable at low speeds.
@@ -33,7 +33,7 @@ namespace Settings
     const double unsafeAngle = 360;
 
     // The angle at which the cube should begin balancing at.
-    const double breakAngle = 30;
+    const double breakAngle = 20;
 
     // The sampling time of the PID controller in ms.
     const int PIDSampleTime = 10;
@@ -124,7 +124,7 @@ class PID
 };
 
 // Controller
-PID controller(-30, -6, 0, Settings::PIDSampleTime);
+PID controller(8, 2, 0, Settings::PIDSampleTime);
 
 // The state of the system.
 State state;
@@ -157,6 +157,17 @@ void setup()
     
     state.currentAngle = getAngleFromIMU(bno);
     Serial.println("BNO has intial angle: " + String(state.currentAngle));
+
+    uint8_t system, gyro, accel, mag = 0;
+    bno.getCalibration(&system, &gyro, &accel, &mag);
+    while (gyro != 0x03)
+    {
+        bno.getCalibration(&system, &gyro, &accel, &mag);
+        Serial.println("Waiting for Gyro calibration");
+        delay(500);
+    }
+    Serial.println("Gyro is calibrated");
+    
 }
 
 
@@ -164,8 +175,10 @@ void loop()
 {
     state.currentAngle = getAngleFromIMU(bno);
     Serial.print("Theta: " + String(state.currentAngle) + " ");
-    
-    if (fabs(state.currentAngle) >= Settings::unsafeAngle)
+
+    uint8_t system, gyro, accel, mag = 0;
+    bno.getCalibration(&system, &gyro, &accel, &mag);
+    if (gyro != 0x03 || isnan(state.currentAngle) || fabs(state.currentAngle) >= Settings::unsafeAngle)
     {
         // Some invalid reading was found, just exit.
         controller.reset();
@@ -178,7 +191,7 @@ void loop()
         esc.writeMicroseconds(Settings::escBreakSignal);
         controller.reset();
         Serial.println("Esc signal: " + String(Settings::escBreakSignal));
-        delay(1000);
+        delay(500);
     }
     else
     {
@@ -188,14 +201,10 @@ void loop()
         {
             escDiff = escDiff > 0 ? Settings::escUpperBound : -Settings::escUpperBound;
         }
-        else if (abs(escDiff) < Settings::escLowerBound)
-        {
-            escDiff = escDiff > 0 ? Settings::escLowerBound : -Settings::escLowerBound;
-        }
 
-        long escValue = Settings::escBreakSignal + escDiff;
-        esc.writeMicroseconds(escValue);
-        Serial.println("Relative esc signal: " + String(escDiff));
+        long escVal = Settings::escBreakSignal + Settings::escUpperBound + escDiff + Settings::escLowerBound;
+        esc.writeMicroseconds(escVal);
+        Serial.println("Esc signal: " + String(escVal));
     }
 
     Serial.print('\n');
@@ -204,10 +213,10 @@ void loop()
 
 double getAngleFromIMU(Adafruit_BNO055& bno)
 {
-   const double angleOffset = 47.0;
+   const double angleOffset = 39.5;
    imu::Quaternion q = bno.getQuat();
    imu::Vector<3> euler = q.toEuler();
-   return euler.y() - angleOffset;
+   return euler.y() * 180.0/PI + angleOffset;
 }
 
 void printErrorAndExit(const String& message)
