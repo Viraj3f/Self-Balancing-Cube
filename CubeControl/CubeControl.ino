@@ -13,6 +13,8 @@
 #include <Adafruit_BNO055.h>
 #include <Servo.h>
 
+#include "PID.hpp"
+
 /*
  * Constant settings for the system.
  */
@@ -53,84 +55,15 @@ namespace Settings
     State() : currentAngle(0), referenceAngle(0) {};
  };
 
- /*
-  * PID implementation class.
-  */
-class PID
-{
-  public:
-    unsigned long lastTime;
-    double output;
-    double errSum, lastInput;
-    double kp, ki, kd;
-    unsigned long sampleTime;
-    bool wasReset;
-
-    PID(double _kp, double _ki, double _kd, unsigned long _sampleTime)
-    {
-        this->sampleTime = _sampleTime;
-        double sampleTimeInSec = ((double)sampleTime)/1000;
-        this->kp = _kp;
-        this->ki = _ki * sampleTimeInSec;
-        this->kd = _kd / sampleTimeInSec;
-        this->reset();
-    }
-
-    void reset()
-    {
-        wasReset = true;
-        lastTime = 0;
-        output = 0;
-        errSum = 0;
-        lastInput = 0;
-    }
-
-    double compute(double input, double setpoint)
-    {
-        if (wasReset)
-        {
-            // If the reset method was called,
-            // set lastInput to input to prevent a
-            // potentially large derivative term.
-            lastInput = input;
-            wasReset = false;
-        }
-
-        unsigned long now = millis();
-        unsigned long timeChange = (now - lastTime);
-        if (timeChange >= sampleTime)
-        {
-            /*Compute all the working error variables*/
-            double error = setpoint - input;
-            errSum += error;
-            double dInput = (input - lastInput);
-
-            if (input * lastInput < 0)
-            {
-                // zero crossing
-                errSum = 0;
-            }
-
-            /*Compute PID Output*/
-            output = kp * error + ki * errSum - kd * dInput;
-
-            /*Remember some variables for next time*/
-            lastInput = input;
-            lastTime = now;
-        }
-
-        return output;
-    }
-};
-
 // Controller
 PID controller(8, 2, 0, Settings::PIDSampleTime);
 
 // The state of the system.
 State state;
 
-// The IMU object.
-Adafruit_BNO055 bno;
+// The IMU objects. 1 is the upper IMU, 2 is the lower one.
+Adafruit_BNO055 imu_1;
+Adafruit_BNO055 imu_2;
 
 // The esc object
 Servo esc;
@@ -146,39 +79,42 @@ void setup()
     delay(5000);
     Serial.println("Esc is setup.");
     
-    // Setup BNO.
-    if(!bno.begin())
+    // Setup BNOs.
+    if(!imu_1.begin(Adafruit_BNO055::OPERATION_MODE_ACCONLY))
     {
-        printErrorAndExit("Could not connect to BNO.");
+        printErrorAndExit("Could not connect to imu 1.");
     }
-    Serial.println("BNO is attached.");
-    bno.setExtCrystalUse(true);
-    delay(1000);
-    
-    state.currentAngle = getAngleFromIMU(bno);
-    Serial.println("BNO has intial angle: " + String(state.currentAngle));
 
-    uint8_t system, gyro, accel, mag = 0;
-    bno.getCalibration(&system, &gyro, &accel, &mag);
-    while (gyro != 0x03)
+    if(!imu_2.begin(Adafruit_BNO055::OPERATION_MODE_ACCONLY))
     {
-        bno.getCalibration(&system, &gyro, &accel, &mag);
-        Serial.println("Waiting for Gyro calibration");
+        printErrorAndExit("Could not connect to imu 2.");
+    }
+
+    imu_1.setExtCrystalUse(true);
+    imu_2.setExtCrystalUse(true);
+    while (!imu_1.isFullyCalibrated() || !imu_2.isFullyCalibrated())
+    {
+        Serial.println("Waiting for imu calibration");
         delay(500);
     }
-    Serial.println("Gyro is calibrated");
-    
+
+    Serial.println("Both imus are calibrated");
+    delay(1000);
+
+    /*
+    state.currentAngle = getAngleFromIMU(bno);
+    Serial.println("BNO has intial angle: " + String(state.currentAngle));
+    */
 }
 
 
 void loop()
 {
-    state.currentAngle = getAngleFromIMU(bno);
+    state.currentAngle = getAngleFromIMUs(imu_1, imu_2);
     Serial.print("Theta: " + String(state.currentAngle) + " ");
 
-    uint8_t system, gyro, accel, mag = 0;
-    bno.getCalibration(&system, &gyro, &accel, &mag);
-    if (gyro != 0x03 || isnan(state.currentAngle) || fabs(state.currentAngle) >= Settings::unsafeAngle)
+    bool areBothIMUsCalibrated = imu_1.isFullyCalibrated() && imu_2.isFullyCalibrated();
+    if (!areBothIMUsCalibrated || isnan(state.currentAngle) || fabs(state.currentAngle) >= Settings::unsafeAngle)
     {
         // Some invalid reading was found, just exit.
         controller.reset();
@@ -211,12 +147,21 @@ void loop()
     delay(Settings::PIDSampleTime);
 }
 
-double getAngleFromIMU(Adafruit_BNO055& bno)
+double getAngleFromIMUs(Adafruit_BNO055& imu_1, Adafruit_BNO055& imu_2)
 {
-   const double angleOffset = 39.5;
-   imu::Quaternion q = bno.getQuat();
-   imu::Vector<3> euler = q.toEuler();
-   return euler.y() * 180.0/PI + angleOffset;
+    const double r1 = 178.89;  // Distance to top IMU in mm
+    const double r2 = 33.24;   // Distance to bottom IMU in mm
+    const double mu = r1/r2;
+    
+    imu::Vector<3> acceleration_1 = imu_1.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
+    imu::Vector<3> acceleration_2 = imu_2.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
+
+    double mx = acceleration_1.x() + mu * acceleration_2.x();
+    double my = acceleration_1.y() - mu * acceleration_2.y();
+
+    double theta = atan(-mx/my) * 180/PI;
+
+    return theta;
 }
 
 void printErrorAndExit(const String& message)
