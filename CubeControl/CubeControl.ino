@@ -21,11 +21,11 @@
 namespace Settings
 {
     // The break signal to the ESC.
-    const int escBreakSignal = 1480;
+    const int escBreakSignal = 1100;
 
     // The maximimum signal to add or subtract relative to
     // the break signal.
-    const int escUpperBound = 80;
+    const int escUpperBound = 100;
 
     // The minimum signal to add  or subtract relative to 
     // the break signal, since BLDCs are unstable at low speeds.
@@ -35,10 +35,10 @@ namespace Settings
     const double unsafeAngle = 360;
 
     // The angle at which the cube should begin balancing at.
-    const double breakAngle = 20;
+    const double breakAngle = 15;
 
     // The sampling time of the PID controller in ms.
-    const int PIDSampleTime = 10;
+    const int PIDSampleTime = 15;
 };
 
 /*
@@ -56,7 +56,8 @@ namespace Settings
  };
 
 // Controller
-PID controller(8, 2, 0, Settings::PIDSampleTime);
+// 8 2 0.1
+PID controller(-8, 0, 0, Settings::PIDSampleTime);
 
 // The state of the system.
 State state;
@@ -70,12 +71,12 @@ Servo esc;
 
 void setup()
 {
-    Serial.begin(9600);
+    Serial.begin(115200);
     
     // Setup ESC.
     esc.attach(11);
     delay(1000);
-    esc.writeMicroseconds(1500);
+    esc.writeMicroseconds(Settings::escBreakSignal);
     delay(5000);
     Serial.println("Esc is setup.");
     
@@ -101,10 +102,8 @@ void setup()
     Serial.println("Both imus are calibrated");
     delay(1000);
 
-    /*
-    state.currentAngle = getAngleFromIMU(bno);
-    Serial.println("BNO has intial angle: " + String(state.currentAngle));
-    */
+    state.currentAngle = getAngleFromIMUs(imu_1, imu_2);
+    Serial.println("System has intial angle: " + String(state.currentAngle));
 }
 
 
@@ -124,27 +123,37 @@ void loop()
     else if (fabs(state.currentAngle) >= Settings::breakAngle)
     {
         // Send the break signal and do nothing.
+        Serial.print(state.currentAngle);
+        Serial.print(" ");
+        Serial.print(map(Settings::escBreakSignal, Settings::escBreakSignal, 2 * Settings::escUpperBound, -30, 30));
+        Serial.print('\n');
         esc.writeMicroseconds(Settings::escBreakSignal);
         controller.reset();
-        Serial.println("Esc signal: " + String(Settings::escBreakSignal));
         delay(500);
     }
     else
     {
-        double escDiff = controller.compute(state.currentAngle, state.referenceAngle);
+        double roundedAngle = (float)((int)(state.currentAngle * 100))/100.0;
+        double escDiff = controller.compute(roundedAngle, state.referenceAngle);
 
         if (abs(escDiff) > Settings::escUpperBound)
         {
             escDiff = escDiff > 0 ? Settings::escUpperBound : -Settings::escUpperBound;
         }
 
-        long escVal = Settings::escBreakSignal + Settings::escUpperBound + escDiff + Settings::escLowerBound;
+        long escVal = Settings::escBreakSignal + Settings::escUpperBound + escDiff + Settings::escLowerBound + 10;
         esc.writeMicroseconds(escVal);
-        Serial.println("Esc signal: " + String(escVal));
-    }
 
-    Serial.print('\n');
-    delay(Settings::PIDSampleTime);
+        Serial.print(roundedAngle);
+        Serial.print(" ");
+        Serial.print(map(escVal, 
+                         Settings::escBreakSignal + Settings::escUpperBound + Settings::escLowerBound + 10,
+                         Settings::escBreakSignal + 2 * Settings::escUpperBound + Settings::escLowerBound + 10,
+                         -30, 30));
+        Serial.print('\n');
+        //Serial.println("Esc signal: " + String(escVal));
+    }
+    delay(10);
 }
 
 double getAngleFromIMUs(Adafruit_BNO055& imu_1, Adafruit_BNO055& imu_2)

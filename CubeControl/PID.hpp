@@ -8,7 +8,7 @@ class PID
   public:
     unsigned long lastTime;
     double output;
-    double errSum, lastInput;
+    double errSum, lastErr;
     double kp, ki, kd;
     unsigned long sampleTime;
     bool wasReset;
@@ -25,24 +25,14 @@ class PID
 
     void reset()
     {
-        wasReset = true;
         lastTime = 0;
         output = 0;
         errSum = 0;
-        lastInput = 0;
+        lastErr = 0;
     }
 
     double compute(double input, double setpoint)
     {
-        if (wasReset)
-        {
-            // If the reset method was called,
-            // set lastInput to input to prevent a
-            // potentially large derivative term.
-            lastInput = input;
-            wasReset = false;
-        }
-
         unsigned long now = millis();
         unsigned long timeChange = (now - lastTime);
         if (timeChange >= sampleTime)
@@ -50,19 +40,12 @@ class PID
             /*Compute all the working error variables*/
             double error = setpoint - input;
             errSum += error;
-            double dInput = (input - lastInput);
-
-            if (input * lastInput < 0)
-            {
-                // zero crossing
-                errSum = 0;
-            }
 
             /*Compute PID Output*/
-            output = kp * error + ki * errSum - kd * dInput;
+            output = kp * error + ki * errSum + kd * (error - lastErr);
 
             /*Remember some variables for next time*/
-            lastInput = input;
+            lastErr = error;
             lastTime = now;
         }
 
