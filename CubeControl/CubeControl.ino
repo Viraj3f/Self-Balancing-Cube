@@ -63,8 +63,10 @@ PID controller(-8, 0, 0, Settings::PIDSampleTime);
 State state;
 
 // The IMU objects. 1 is the upper IMU, 2 is the lower one.
-Adafruit_BNO055 imu_1;
-Adafruit_BNO055 imu_2;
+// The ADR Pin of imu 2 needs to be connected to 3.3V
+// SCL is connected to A5, SDA to A4, VIN to 5V for both.
+Adafruit_BNO055 imu_1(-1, BNO055_ADDRESS_A);
+Adafruit_BNO055 imu_2(-1, BNO055_ADDRESS_B);
 
 // The esc object
 Servo esc;
