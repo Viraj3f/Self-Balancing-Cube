@@ -1,7 +1,7 @@
 /*
    Connections
    ===========
-   --From IMU--
+   --From IMU 1--
    Connect SCL to D21
    Connect SDA to D20
    Connect VDD to 3.3V DC
@@ -81,12 +81,12 @@ void setup()
     Serial.println("Esc is setup.");
     
     // Setup BNOs.
-    if(!imu_1.begin(Adafruit_BNO055::OPERATION_MODE_ACCONLY))
+    if(!imu_1.begin(Adafruit_BNO055::OPERATION_MODE_IMUPLUS))
     {
         printErrorAndExit("Could not connect to imu 1.");
     }
 
-    if(!imu_2.begin(Adafruit_BNO055::OPERATION_MODE_ACCONLY))
+    if(!imu_2.begin(Adafruit_BNO055::OPERATION_MODE_IMUPLUS))
     {
         printErrorAndExit("Could not connect to imu 2.");
     }
