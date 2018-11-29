@@ -25,7 +25,7 @@ namespace Settings
 
     // The maximimum signal to add or subtract relative to
     // the break signal.
-    const int escUpperBound = 100;
+    const int escUpperBound = 300;
 
     // The minimum signal to add  or subtract relative to 
     // the break signal, since BLDCs are unstable at low speeds.
@@ -57,7 +57,7 @@ namespace Settings
 
 // Controller
 // 8 2 0.1
-PID controller(-8, 0, 0, Settings::PIDSampleTime);
+PID controller(30, 0, 0, Settings::PIDSampleTime);
 
 // The state of the system.
 State state;
@@ -65,8 +65,7 @@ State state;
 // The IMU objects. 1 is the upper IMU, 2 is the lower one.
 // The ADR Pin of imu 2 needs to be connected to 3.3V
 // SCL is connected to A5, SDA to A4, VIN to 5V for both.
-Adafruit_BNO055 imu_1(-1, BNO055_ADDRESS_A);
-Adafruit_BNO055 imu_2(-1, BNO055_ADDRESS_B);
+Adafruit_BNO055 bno;
 
 // The esc object
 Servo esc;
@@ -79,43 +78,36 @@ void setup()
     esc.attach(11);
     delay(1000);
     esc.writeMicroseconds(Settings::escBreakSignal);
-    delay(5000);
+    delay(2000);
     Serial.println("Esc is setup.");
     
     // Setup BNOs.
-    if(!imu_1.begin(Adafruit_BNO055::OPERATION_MODE_IMUPLUS))
+    if(!bno.begin(Adafruit_BNO055::OPERATION_MODE_IMUPLUS))
     {
         printErrorAndExit("Could not connect to imu 1.");
     }
 
-    if(!imu_2.begin(Adafruit_BNO055::OPERATION_MODE_IMUPLUS))
-    {
-        printErrorAndExit("Could not connect to imu 2.");
-    }
+    bno.setExtCrystalUse(true);
 
-    imu_1.setExtCrystalUse(true);
-    imu_2.setExtCrystalUse(true);
-    while (!imu_1.isFullyCalibrated() || !imu_2.isFullyCalibrated())
+    while (!isAccelerationCalibrated(bno))
     {
-        Serial.println("Waiting for imu calibration");
+        Serial.println("Waiting for accleration calibration");
         delay(500);
     }
 
     Serial.println("Both imus are calibrated");
     delay(1000);
 
-    state.currentAngle = getAngleFromIMUs(imu_1, imu_2);
+    state.currentAngle = getAngleFromIMU(bno);
     Serial.println("System has intial angle: " + String(state.currentAngle));
 }
 
 
 void loop()
 {
-    state.currentAngle = getAngleFromIMUs(imu_1, imu_2);
-    Serial.print("Theta: " + String(state.currentAngle) + " ");
+    state.currentAngle = getAngleFromIMU(bno);
 
-    bool areBothIMUsCalibrated = imu_1.isFullyCalibrated() && imu_2.isFullyCalibrated();
-    if (!areBothIMUsCalibrated || isnan(state.currentAngle) || fabs(state.currentAngle) >= Settings::unsafeAngle)
+    if (isnan(state.currentAngle) || fabs(state.currentAngle) >= Settings::unsafeAngle)
     {
         // Some invalid reading was found, just exit.
         controller.reset();
@@ -155,24 +147,24 @@ void loop()
         Serial.print('\n');
         //Serial.println("Esc signal: " + String(escVal));
     }
-    delay(10);
+    delay(Settings::PIDSampleTime);
 }
 
-double getAngleFromIMUs(Adafruit_BNO055& imu_1, Adafruit_BNO055& imu_2)
+double getAngleFromIMU(Adafruit_BNO055& bno)
 {
-    const double r1 = 178.89;  // Distance to top IMU in mm
-    const double r2 = 33.24;   // Distance to bottom IMU in mm
-    const double mu = r1/r2;
-    
-    imu::Vector<3> acceleration_1 = imu_1.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
-    imu::Vector<3> acceleration_2 = imu_2.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
-
-    double mx = acceleration_1.x() + mu * acceleration_2.x();
-    double my = acceleration_1.y() - mu * acceleration_2.y();
-
-    double theta = atan(-mx/my) * 180/PI;
+    imu::Vector<3> acceleration = bno.getVector(Adafruit_BNO055::VECTOR_GRAVITY);
+    double mx = acceleration.x();
+    double my = acceleration.y();
+    double theta = atan2(mx, my) * 180/PI;
 
     return theta;
+}
+
+bool isAccelerationCalibrated(Adafruit_BNO055& bno)
+{
+    uint8_t acceleration = 0;
+    bno.getCalibration(nullptr, nullptr, &acceleration, nullptr);
+    return acceleration > 0;
 }
 
 void printErrorAndExit(const String& message)
