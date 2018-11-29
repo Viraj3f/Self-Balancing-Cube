@@ -25,11 +25,11 @@ namespace Settings
 
     // The maximimum signal to add or subtract relative to
     // the break signal.
-    const int escUpperBound = 300;
+    const int escUpperBound = 200;
 
     // The minimum signal to add  or subtract relative to 
     // the break signal, since BLDCs are unstable at low speeds.
-    const int escLowerBound = 30;
+    const int escLowerBound = 50;
 
     // The angle at which the cube system should just quit.
     const double unsafeAngle = 360;
@@ -57,7 +57,7 @@ namespace Settings
 
 // Controller
 // 8 2 0.1
-PID controller(30, 0, 0, Settings::PIDSampleTime);
+PID controller(3, 0, 6, Settings::PIDSampleTime);
 
 // The state of the system.
 State state;
@@ -119,7 +119,7 @@ void loop()
         // Send the break signal and do nothing.
         Serial.print(state.currentAngle);
         Serial.print(" ");
-        Serial.print(map(Settings::escBreakSignal, Settings::escBreakSignal, 2 * Settings::escUpperBound, -30, 30));
+        Serial.print(0);
         Serial.print('\n');
         esc.writeMicroseconds(Settings::escBreakSignal);
         controller.reset();
@@ -127,7 +127,7 @@ void loop()
     }
     else
     {
-        double roundedAngle = (float)((int)(state.currentAngle * 100))/100.0;
+        double roundedAngle = (float)((int)(state.currentAngle * 10))/10.0;
         double escDiff = controller.compute(roundedAngle, state.referenceAngle);
 
         if (abs(escDiff) > Settings::escUpperBound)
@@ -135,17 +135,16 @@ void loop()
             escDiff = escDiff > 0 ? Settings::escUpperBound : -Settings::escUpperBound;
         }
 
-        long escVal = Settings::escBreakSignal + Settings::escUpperBound + escDiff + Settings::escLowerBound + 10;
+        long escVal = Settings::escBreakSignal + Settings::escUpperBound + escDiff + Settings::escLowerBound;
         esc.writeMicroseconds(escVal);
 
         Serial.print(roundedAngle);
         Serial.print(" ");
-        Serial.print(map(escVal, 
-                         Settings::escBreakSignal + Settings::escUpperBound + Settings::escLowerBound + 10,
-                         Settings::escBreakSignal + 2 * Settings::escUpperBound + Settings::escLowerBound + 10,
-                         -30, 30));
+        Serial.print(map(escDiff, 
+                         -Settings::escUpperBound,
+                         Settings::escUpperBound,
+                         -45, 45));
         Serial.print('\n');
-        //Serial.println("Esc signal: " + String(escVal));
     }
     delay(Settings::PIDSampleTime);
 }
@@ -157,14 +156,19 @@ double getAngleFromIMU(Adafruit_BNO055& bno)
     double my = acceleration.y();
     double theta = atan2(mx, my) * 180/PI;
 
+    imu::Vector<3> velocity = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
+
+    Serial.println(velocity.magnitude());
+
     return theta;
 }
 
 bool isAccelerationCalibrated(Adafruit_BNO055& bno)
 {
-    uint8_t acceleration = 0;
-    bno.getCalibration(nullptr, nullptr, &acceleration, nullptr);
-    return acceleration > 0;
+    uint8_t acceleration = 0, gyro = 0;
+    bno.getCalibration(nullptr, nullptr, &acceleration, &gyro);
+    //return acceleration > 0 && gyro > 0;
+    return true;
 }
 
 void printErrorAndExit(const String& message)
