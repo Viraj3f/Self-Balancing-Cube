@@ -10,17 +10,18 @@ class PID
     double output;
     double errSum, lastErr;
     double kp, ki, kd;
+    double dt;
     unsigned long sampleTime;
     bool wasReset;
 
     PID(double _kp, double _ki, double _kd, unsigned long _sampleTime)
     {
         this->sampleTime = _sampleTime;
-        double sampleTimeInSec = ((double)sampleTime)/1000;
         this->kp = _kp;
-        this->ki = _ki * sampleTimeInSec;
-        this->kd = _kd / sampleTimeInSec;
+        this->ki = _ki;
+        this->kd = _kd;
         this->reset();
+        this->dt = ((double) this->sampleTime) / 1000;
     }
 
     void reset()
@@ -42,7 +43,7 @@ class PID
             errSum += error;
 
             /*Compute PID Output*/
-            output = kp * error + ki * errSum + kd * (error - lastErr);
+            output = kp * error + 1.0/ki * errSum * dt + kd * (error - lastErr)/dt;
 
             /*Remember some variables for next time*/
             lastErr = error;

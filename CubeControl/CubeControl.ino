@@ -57,7 +57,17 @@ namespace Settings
 
 // Controller
 // 8 2 0.1
-PID controller(3, 0, 6, Settings::PIDSampleTime);
+// 21, 0.18,  0.27
+// 28, 0.18,  0.045
+// 21, 0.18,  0.045
+// 28, 0,  0.045
+
+// Best ranked
+// 0.6 * Ku, 0.5 * Tu, 0.75 * Tu
+
+double Ku = 36;
+double Tu = 0.357;
+PID controller(0.75 * Ku, 0.5 * Tu, Tu / 8.0, Settings::PIDSampleTime);
 
 // The state of the system.
 State state;
@@ -100,6 +110,10 @@ void setup()
 
     state.currentAngle = getAngleFromIMU(bno);
     Serial.println("System has intial angle: " + String(state.currentAngle));
+
+    Serial.println(0);
+    Serial.println(Settings::breakAngle);
+    Serial.println(-Settings::breakAngle);
 }
 
 
@@ -117,10 +131,12 @@ void loop()
     else if (fabs(state.currentAngle) >= Settings::breakAngle)
     {
         // Send the break signal and do nothing.
+        /*
         Serial.print(state.currentAngle);
         Serial.print(" ");
         Serial.print(0);
         Serial.print('\n');
+        */
         esc.writeMicroseconds(Settings::escBreakSignal);
         controller.reset();
         delay(500);
@@ -143,7 +159,7 @@ void loop()
         Serial.print(map(escDiff, 
                          -Settings::escUpperBound,
                          Settings::escUpperBound,
-                         -45, 45));
+                         -Settings::breakAngle, Settings::breakAngle));
         Serial.print('\n');
     }
     delay(Settings::PIDSampleTime);
@@ -156,10 +172,6 @@ double getAngleFromIMU(Adafruit_BNO055& bno)
     double my = acceleration.y();
     double theta = atan2(mx, my) * 180/PI;
 
-    imu::Vector<3> velocity = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
-
-    Serial.println(velocity.magnitude());
-
     return theta;
 }
 
@@ -167,8 +179,7 @@ bool isAccelerationCalibrated(Adafruit_BNO055& bno)
 {
     uint8_t acceleration = 0, gyro = 0;
     bno.getCalibration(nullptr, nullptr, &acceleration, &gyro);
-    //return acceleration > 0 && gyro > 0;
-    return true;
+    return acceleration > 0;
 }
 
 void printErrorAndExit(const String& message)
