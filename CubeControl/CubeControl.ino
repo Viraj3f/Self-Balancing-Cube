@@ -67,7 +67,7 @@ namespace Settings
 
 double Ku = 36;
 double Tu = 0.357;
-PID controller(0.75 * Ku, 0.5 * Tu, Tu / 8.0, Settings::PIDSampleTime);
+PID controller(0.6 * Ku, 0.6 * Tu, 0.83 * Tu, Settings::PIDSampleTime);
 
 // The state of the system.
 State state;
@@ -144,7 +144,7 @@ void loop()
     else
     {
         double roundedAngle = (float)((int)(state.currentAngle * 10))/10.0;
-        double escDiff = controller.compute(roundedAngle, state.referenceAngle);
+        double escDiff = controller.compute(state.currentAngle, state.referenceAngle);
 
         if (abs(escDiff) > Settings::escUpperBound)
         {
@@ -172,7 +172,7 @@ double getAngleFromIMU(Adafruit_BNO055& bno)
     double my = acceleration.y();
     double theta = atan2(mx, my) * 180/PI;
 
-    return theta;
+    return theta + 3;
 }
 
 bool isAccelerationCalibrated(Adafruit_BNO055& bno)
